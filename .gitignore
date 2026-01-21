@@ -1,0 +1,18 @@
+# Ignore dataset files and virtual environment
+/data/
+venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# PyTorch checkpoints
+*.pth
+*.pt
+
+# VS Code settings
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
