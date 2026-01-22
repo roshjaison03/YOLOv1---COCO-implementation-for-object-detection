@@ -197,7 +197,7 @@ def mean_average_precision(
         # torch.trapz for numerical integration
         average_precisions.append(torch.trapz(precisions, recalls))
 
-    return sum(average_precisions) / len(average_precisions)
+    return sum(average_precisions) / len(average_precisions) if len(average_precisions) > 0 else 0
 
 
 def plot_image(image, boxes):
@@ -244,7 +244,6 @@ def get_bboxes(
     all_pred_boxes = []
     all_true_boxes = []
 
-    # make sure model is in eval before get bboxes
     model.eval()
     train_idx = 0
 
@@ -256,34 +255,34 @@ def get_bboxes(
             predictions = model(x)
 
         batch_size = x.shape[0]
-        true_bboxes = cellboxes_to_boxes(labels)
-        bboxes = cellboxes_to_boxes(predictions)
+
+        # 🔑 Decode GT and predictions
+        true_bboxes = cellboxes_to_boxes(labels.reshape(labels.shape[0], -1))
+        pred_bboxes = cellboxes_to_boxes(predictions)
 
         for idx in range(batch_size):
+            # ---------- Predictions ----------
             nms_boxes = non_max_suppression(
-                bboxes[idx],
+                pred_bboxes[idx],
                 iou_threshold=iou_threshold,
                 threshold=threshold,
                 box_format=box_format,
             )
 
-
-            #if batch_idx == 0 and idx == 0:
-            #    plot_image(x[idx].permute(1,2,0).to("cpu"), nms_boxes)
-            #    print(nms_boxes)
-
             for nms_box in nms_boxes:
                 all_pred_boxes.append([train_idx] + nms_box)
 
+            # ---------- Ground Truth (NO thresholding) ----------
             for box in true_bboxes[idx]:
-                # many will get converted to 0 pred
-                if box[1] > threshold:
+                # box = [class, confidence, x, y, w, h]
+                if box[1] > 0:   # object exists
                     all_true_boxes.append([train_idx] + box)
 
             train_idx += 1
 
     model.train()
     return all_pred_boxes, all_true_boxes
+
 
 
 
@@ -300,10 +299,12 @@ def convert_cellboxes(predictions, S=7):
 
     predictions = predictions.to("cpu")
     batch_size = predictions.shape[0]
-    total_dim = predictions.shape[-1]
     B = 2
-    C = total_dim - B * 5
-    predictions = predictions.reshape(batch_size, S, S, total_dim)
+    # Input is flattened: (batch_size, S*S*(C+B*5))
+    # Per-image flattened size is S*S*(C+B*5)
+    per_image_size = predictions.shape[1] // (S * S)  # This is (C + B*5)
+    C = per_image_size - B * 5
+    predictions = predictions.reshape(batch_size, S, S, per_image_size)
 
     bboxes1 = predictions[..., C + 1 : C + 5]
     bboxes2 = predictions[..., C + 6 : C + 10]

@@ -1,8 +1,3 @@
-"""
-Main file for training Yolo model on Pascal VOC dataset
-
-"""
-
 import torch
 import torchvision.transforms as transforms
 import torch.optim as optim
@@ -10,7 +5,7 @@ import torchvision.transforms.functional as FT
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from model import Yolov1
-from dataset import  COCODataset
+from dataset import COCODataset
 from utils import (
     non_max_suppression,
     mean_average_precision,
@@ -26,35 +21,25 @@ from loss import YoloLoss
 seed = 123
 torch.manual_seed(seed)
 
-# Hyperparameters etc. 
-LEARNING_RATE = 2e-5
+# Hyperparameters etc.
+LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 16 # 64 in original paper but I don't have that much vram, grad accum?
 WEIGHT_DECAY = 0
 EPOCHS = 1000
 NUM_WORKERS = 2
 PIN_MEMORY = True
-LOAD_MODEL = False
-LOAD_MODEL_FILE = "overfit.pth.tar"
-IMG_DIR = "data/person.v1i.coco/train"
+LOAD_MODEL = True
+LOAD_MODEL_FILE = "/content/drive/MyDrive/my_yolov1_custom_save.pth.tar"
+IMG_DIR = "/content/drive/MyDrive/YOLOv1/train"
 # LABEL_DIR = "data/labels"
 # COCO annotation files (adjust these paths to your dataset)
-TRAIN_ANN = "data/person.v1i.coco/_annotations.coco.json"
+TRAIN_ANN = "/content/drive/MyDrive/YOLOv1/_annotations.coco.json"
 # TEST_ANN = "data/annotations/instances_val.json"
 
-
-class Compose(object):
-    def __init__(self, transforms):
-        self.transforms = transforms
-
-    def __call__(self, img, bboxes):
-        for t in self.transforms:
-            img, bboxes = t(img), bboxes
-
-        return img, bboxes
-
-
-transform = Compose([transforms.Resize((448, 448)), transforms.ToTensor(),])
+# Removed the custom Compose class as COCODataset will handle it internally.
+# The transform below is a standard torchvision.transforms.Compose for image only.
+transform = transforms.Compose([transforms.Resize((448, 448)), transforms.ToTensor(),])
 
 
 def train_fn(train_loader, model, optimizer, loss_fn):
@@ -78,7 +63,7 @@ def train_fn(train_loader, model, optimizer, loss_fn):
 
 def main():
     # For your custom COCO-format dataset with only the "person" class
-    NUM_CLASSES = 1
+    NUM_CLASSES = 20
     model = Yolov1(split_size=7, num_boxes=2, num_classes=NUM_CLASSES).to(DEVICE)
     optimizer = optim.Adam(
         model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
@@ -90,7 +75,7 @@ def main():
 
     # Use COCO-format datasets for train and test. Change TRAIN_ANN/TEST_ANN to match your files.
     train_dataset = COCODataset(
-        TRAIN_ANN, img_dir=IMG_DIR, S=7, B=2, C=NUM_CLASSES, transform=transform
+        TRAIN_ANN,IMG_DIR, S=7, B=2, C=NUM_CLASSES, transform=transform # Pass C=NUM_CLASSES
     )
 
     # test_dataset = COCODataset(
@@ -126,9 +111,15 @@ def main():
         #    import sys
         #    sys.exit()
 
+        train_fn(train_loader, model, optimizer, loss_fn)
+
         pred_boxes, target_boxes = get_bboxes(
             train_loader, model, iou_threshold=0.5, threshold=0.4
         )
+        print(f"Epoch No: {epoch}")
+        print("GT boxes:", len(target_boxes), "Pred boxes:", len(pred_boxes))
+        print(f"DEBUG: target_boxes: {target_boxes[:2]}") # Print first 2 ground truth boxes
+        print(f"DEBUG: pred_boxes: {pred_boxes[:2]}") # Print first 2 predicted boxes
 
         mean_avg_prec = mean_average_precision(
             pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
@@ -144,7 +135,7 @@ def main():
         #    import time
         #    time.sleep(10)
 
-        train_fn(train_loader, model, optimizer, loss_fn)
+
 
 
 if __name__ == "__main__":
