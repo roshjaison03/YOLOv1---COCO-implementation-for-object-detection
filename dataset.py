@@ -1,4 +1,3 @@
-
 import torch
 from torch.utils.data import Dataset
 from pycocotools.coco import COCO
@@ -68,30 +67,8 @@ class COCODataset(Dataset):
         # but for typical YOLO transforms (Resize, ToTensor), we can apply them directly to the image.
         # Bounding box coordinates extracted by extract_boxes are already normalized.
         if self.transform:
-            # Before applying transforms, we need to adjust boxes for any resizing
-            if raw_boxes_xyxy.numel() > 0: # Only if there are boxes
-                current_width, current_height = image.size
-                for t in self.transform.transforms:
-                    if isinstance(t, (torchvision.transforms.Resize)):
-                        # Get target size from resize transform
-                        target_size = t.size
-                        if isinstance(target_size, int):
-                            # if only one dimension is given, it's the smaller edge
-                            if current_width < current_height:
-                                new_width, new_height = target_size, int(target_size * current_height / current_width)
-                            else:
-                                new_width, new_height = int(target_size * current_width / current_height), target_size
-                        else:
-                            new_height, new_width = target_size # (H, W)
-
-                        scale_x = new_width / current_width
-                        scale_y = new_height / current_height
-
-                        raw_boxes_xyxy[:, 0] *= scale_x # x1
-                        raw_boxes_xyxy[:, 2] *= scale_x # x2
-                        raw_boxes_xyxy[:, 1] *= scale_y # y1
-                        raw_boxes_xyxy[:, 3] *= scale_y # y2
-                        break # Only need to apply scaling once based on the first resize
+            # Removed: Incorrect scaling of raw_boxes_xyxy based on image resize.
+            # Normalized bounding box coordinates (0-1) should not change with image pixel resizing.
             image = self.transform(image) # Apply all image transforms
 
         # Now, construct the YOLO label matrix (S, S, C + B*5)
@@ -118,9 +95,9 @@ class COCODataset(Dataset):
                 x_cell = self.S * x_center_norm - cell_x
                 y_cell = self.S * y_center_norm - cell_y
 
-                # Calculate width and height relative to the entire image, then scale by S
-                w_cell = width_norm * self.S
-                h_cell = height_norm * self.S
+                # Calculate width and height relative to the entire image, NOT scaled by S
+                w_cell = width_norm
+                h_cell = height_norm
 
                 # Ensure cell indices are within bounds
                 if cell_x < 0 or cell_x >= self.S or cell_y < 0 or cell_y >= self.S:
